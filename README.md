@@ -22,4 +22,4 @@ examples about how to infer a transcription dynamics in yeast cells. The details
 _Fang, Zhou, Ankit Gupta, and Mustafa Khammash. "A divide-and-conquer approach for analyzing high-dimensional reaction network systems." bioRxiv 2023._ <br />
 Before runing the python files, one need to extract the two zip files in "Example_of_model_identification/results_in_paper". 
 Many identification results haven been given in the same repository. 
-These results can be visualized using the jupyter notebooks in the folder "Example_of_model_identification". 
+Also, these results can be visualized using the jupyter notebooks in the folder "Example_of_model_identification". 
