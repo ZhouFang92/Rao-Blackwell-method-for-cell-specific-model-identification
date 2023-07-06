@@ -88,7 +88,7 @@ Y_list = MI.generate_observations(state_list, time_list, parameter_values, Obser
 import pickle
 
 # Load the objects from the pickle file
-with open('Example_of_model_identification/result/data_example_4_tf_480_particle_number_1000.pkl', 'rb') as f:
+with open('Example_of_model_identification/results_in_paper/numerical_example_tf_480_particle_number_10000.pkl', 'rb') as f:
     data = pickle.load(f)
 
 Y_list = data['Y_list']
@@ -117,7 +117,7 @@ Initial_marginal_distribution['k3'].distribution[0] = sum(Initial_marginal_distr
 Initial_marginal_distribution['k3'].distribution = Initial_marginal_distribution['k3'].distribution / sum(
     Initial_marginal_distribution['k3'].distribution)
 
-particle_size = 1000
+particle_size = 10000
 Marginal_distributions_over_time, final_particles, time_result, mean_result, std_result \
     = MI.RB_inference_time_course_data(
         time_points_for_observations = Observation_times_list,
