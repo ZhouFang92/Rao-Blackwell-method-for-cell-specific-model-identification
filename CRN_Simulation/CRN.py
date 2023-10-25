@@ -153,7 +153,7 @@ class CRN():
 
         # the last update
         time_output.append(Tf)
-        state_output.append(self.state)
+        state_output.append(self.state.copy())
 
         return time_output.copy(), state_output.copy()
 
