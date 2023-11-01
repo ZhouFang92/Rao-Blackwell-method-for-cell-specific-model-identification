@@ -23,3 +23,6 @@ _Fang, Zhou, Ankit Gupta, and Mustafa Khammash. "A divide-and-conquer approach f
 Before runing the python files, one need to extract the two zip files in "Example_of_model_identification/results_in_paper". 
 Many identification results haven been given in the same repository. 
 Also, these results can be visualized using the jupyter notebooks in the folder "Example_of_model_identification". 
+
+## Example 
+A numerial example is presented in Example_of_model_identification/model_identification_example_4.ipynb, introducing how to use the code.  
