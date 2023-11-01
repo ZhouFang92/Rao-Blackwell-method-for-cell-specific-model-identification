@@ -149,7 +149,7 @@ class CRN():
 
             # Store the new state in the output
             time_output.append(t)
-            state_output.append(self.state)
+            state_output.append(self.state.copy())
 
         # the last update
         time_output.append(Tf)
