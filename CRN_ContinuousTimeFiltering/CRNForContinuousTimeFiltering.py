@@ -467,15 +467,18 @@ class CRNForContinuousTimeFiltering(CRN):
                 sign.append(-1)
 
         # index of columns and rows
-        state_row = np.array(state_row)
-        state_column = np.array(state_column)
-        row_index = self.subsystems[index_subsystem].get_index_of_states(state_row)
-        column_index = self.subsystems[index_subsystem].get_index_of_states(state_column)
+        if len(state_row) > 0: # if the matrix is not empty
+            state_row = np.array(state_row)
+            state_column = np.array(state_column)
+            row_index = self.subsystems[index_subsystem].get_index_of_states(state_row)
+            column_index = self.subsystems[index_subsystem].get_index_of_states(state_column)
 
-
-        A = SparseMatrixStructure(row_index, column_index, reaction_list, state_column, sign, \
+            A = SparseMatrixStructure(row_index, column_index, reaction_list, state_column, sign, \
                                   self.subsystems[index_subsystem].parameter_species_ordering, \
                                   self.propensities, self.reaction_ordering, matrix_dimension)
+        else:
+            size = self.get_size_of_subsystems()[index_subsystem]
+            A = scipy.sparse.coo_matrix(([0], ([0], [0])), shape=(size, size)).tocsr()
 
         return A #row_index, column_index, reaction_list, state_column, sign
 
