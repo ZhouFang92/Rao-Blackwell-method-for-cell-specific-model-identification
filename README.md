@@ -19,7 +19,10 @@ _Fang, Zhou, Ankit Gupta, and Mustafa Khammash. "A divide-and-conquer approach f
 ## Usage
 The files MI_example_4.py, MI_example_4_two_gene_state.py, real_data_3_gene_state_model_larger_space.py, and real_data_2_gene_state_model.py show
 examples about how to infer a transcription dynamics in yeast cells. The details about the model are given in the literature <br />
-_Fang, Zhou, Ankit Gupta, and Mustafa Khammash. "A divide-and-conquer approach for analyzing high-dimensional reaction network systems." bioRxiv 2023._ <br />
+_Fang, Zhou, Ankit Gupta, and Mustafa Khammash. "A divide-and-conquer approach for analyzing high-dimensional noisy gene expression networks." bioRxiv 2023._ <br />
 Before runing the python files, one need to extract the two zip files in "Example_of_model_identification/results_in_paper". 
 Many identification results haven been given in the same repository. 
 Also, these results can be visualized using the jupyter notebooks in the folder "Example_of_model_identification". 
+
+## Example 
+A numerial example is presented in Example_of_model_identification/model_identification_example_4.ipynb, introducing how to use the code.  
