@@ -24,7 +24,7 @@ Before running the Python files, one needs to extract the two zip files in "Exam
 Many identification results have been given in the same repository. 
 Also, these results can be visualized using the jupyter notebooks in the folder "Example_of_model_identification". 
 
-## Example 
+## Examples
 
 ### Example 1: A numerical example to infer a yeast transcription system.
 
