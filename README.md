@@ -40,6 +40,8 @@ MI_example_4_two_gene_state.py: This code generates observation data for a two-g
 
 real_data_3_gene_state_model_larger_space.py: This code infers the system by assuming at most three gene states exist. The results are plotted in "Example_of_model_identification/Inference_of_real_data_3_gene_state_model.ipynb".
 
-real_data_3_gene_state_model_small_parameter_region.py: This code infers the system with a grid refinement strategy. The results are plotted in "Example_of_model_identification/".
+real_data_3_gene_state_model_small_parameter_region.py: This code infers the system with a grid refinement strategy. The results are plotted in "Example_of_model_identification/Inference_of_real_data_3_gene_state_model_small_space.ipynb".
 
-A numerical example is presented in Example_of_model_identification/model_identification_example_4.ipynb, introducing how to use the code.  
+real_data_2_gene_state_model.py: This code infers the system by assuming at most two gene states exist. The results are plotted in "Example_of_model_identification/Inference_of_real_data_2_gene_state_model.ipynb".
+
+noise_analysis.py: This code performs noise analysis for the yeast cells based on the obtained inference results. The results are plotted in "Example_of_model_identification/noise_analysis.ipynb".
