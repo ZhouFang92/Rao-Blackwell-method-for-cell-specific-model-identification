@@ -501,6 +501,8 @@ class RBForModelIdentification(CRN):
             particle.follower_distributions[i].replace_distributions([t], [new_distribution])
 
         # update the weight
+        if new_weight == float('inf') or new_weight == float('-inf') or new_weight == float('nan'):
+            new_weight = 0
         particle.update_weight(new_weight)
 
     def resample_particles(self, particles):
@@ -517,7 +519,10 @@ class RBForModelIdentification(CRN):
 
     def resampling(self, weights):
         # the algorithm in the book fundamentals of stochastic filtering
-        weights = weights / np.sum(weights)
+        if np.sum(weights) > 0:
+            weights = weights / np.sum(weights)
+        else: # if all weights are zero give the uniform weights
+            weights = np.ones(len(weights)) / len(weights)
         o = np.zeros(len(weights)) # offsprings
         n = len(weights)
         g = n

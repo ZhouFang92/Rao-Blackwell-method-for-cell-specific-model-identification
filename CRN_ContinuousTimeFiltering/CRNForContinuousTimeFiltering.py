@@ -298,7 +298,10 @@ class CRNForContinuousTimeFiltering(CRN):
         return len(self.unkown_parameters)
 
     def get_number_of_subsystem(self):
-        return max(self.connected_components_of_the_graph.membership) + 1
+        if self.connected_components_of_the_graph.membership == []:
+            return 0
+        else:
+            return max(self.connected_components_of_the_graph.membership) + 1
 
     def get_number_of_xi(self):
         return self.xi.columns.size
