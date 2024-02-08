@@ -28,13 +28,18 @@ Also, these results can be visualized using the jupyter notebooks in the folder 
 
 ### Example 1: A numerical example to infer a yeast transcription system.
 
-MI_example_4.py <-- This file generates observation data for a three-gene-state system and applies our method to the system. 
+MI_example_4.py: This code generates observation data for a three-gene-state system and applies our method to the system. The results are plotted in "Example_of_model_identification/model_identification_example_4.ipynb".
 
-Example_of_model_identification/model_identification_example_4.ipynb <-- This file plots the result of the inference result for the three-gene-state model. 
+MI_example_4_other_parameter_sets.py: This code generates the observation trajectories with several other sets of model parameters and applies our method to these generated trajectories. The results are plotted in "Example_of_model_identification/model_identification_example_4 (other parameter set).ipynb".
 
+MI_example_4_sigma_uncertainty_general_version.py: This code infers the system when the observation noise intensity is unknown. The results are plotted in "Example_of_model_identification/model_identification_example_4(sigma_uncertainty).ipynb". 
 
+MI_example_4_two_gene_state.py: This code generates observation data for a two-gene-state system and tests whether our method can accurately identify this system. The results are plotted in "model_identification_example_4_(2-gene-state).ipynb".
 
+### Example 2: Identification of a yeast transcription system from experimental data
 
+real_data_3_gene_state_model_larger_space.py: This code infers the system by assuming at most three gene states exist. The results are plotted in "Example_of_model_identification/Inference_of_real_data_3_gene_state_model.ipynb".
 
+real_data_3_gene_state_model_small_parameter_region.py: This code infers the system with a grid refinement strategy. The results are plotted in "Example_of_model_identification/".
 
 A numerical example is presented in Example_of_model_identification/model_identification_example_4.ipynb, introducing how to use the code.  
