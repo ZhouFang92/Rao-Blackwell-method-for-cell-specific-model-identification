@@ -33,6 +33,7 @@ class HiddenSubsystems:
         :param state_list: a list of states
         :return: a list of indices for these states in array self.states
         """
+        # print(np.round(self.map_from_state_to_index.predict(state_list)).astype(int))
         return np.round(self.map_from_state_to_index.predict(state_list)).astype(int)
 
     # structure of matrix

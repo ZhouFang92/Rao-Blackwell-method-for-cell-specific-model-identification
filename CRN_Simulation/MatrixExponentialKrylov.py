@@ -19,6 +19,9 @@ class MatrixExponentialKrylov:
         epsilon = 10 ** (-10) # tolerance of the error
         dt = 1
         A_norm = scipy.sparse.linalg.norm(A, 1)  # norma of the matrix A
+        # check if A is a zero matrix or not
+        if A_norm < 1e-8:
+            return b
         if basis_size == None:
             m = adaptively_set_number_of_basis(A_norm*dt) # size of the expansion
             # m = 10 # size of the expansion
@@ -33,6 +36,8 @@ class MatrixExponentialKrylov:
 
             # Construct the basis; Arnoldi process
             beta = np.linalg.norm(b)
+            if beta < 1e-10:
+                return b # if b is a zero vector, we return a zero vector
             # print(b)
             # print(b.shape)
             # print(beta)
@@ -117,6 +122,9 @@ class MatrixExponentialKrylov:
         epsilon = 10 ** (-10) # tolerance of the error
         dt = Tf-T0
         A_norm = scipy.sparse.linalg.norm(A, 1) # norma of the matrix A
+        # check if A is a zero matrix or not
+        if A_norm*dt < 1e-8:
+            return [Tf], [b]
         if basis_size == None:
             m = adaptively_set_number_of_basis(A_norm*dt)  # size of the expansion
             # m = 10 # size of the expansion
@@ -133,6 +141,10 @@ class MatrixExponentialKrylov:
 
             # Construct the basis; Arnoldi process
             beta = np.linalg.norm(b)
+            if beta < 1e-10:
+                time_list.append(Tf)
+                result_list.append(b)
+                return time_list, result_list # if b is a zero vector, we return a zero vector
             V[:, 0:1] = b / beta
             for j in range(m):
                 # print(j)

@@ -481,7 +481,10 @@ class CRNForContinuousTimeFiltering(CRN):
                                   self.propensities, self.reaction_ordering, matrix_dimension)
         else:
             size = self.get_size_of_subsystems()[index_subsystem]
-            A = scipy.sparse.coo_matrix(([0], ([0], [0])), shape=(size, size)).tocsr()
+            # A = scipy.sparse.coo_matrix(([0], ([0], [0])), shape=(size, size)).tocsr()
+            A = SparseMatrixStructure([], [], [], [], [], \
+                                      self.subsystems[index_subsystem].parameter_species_ordering, \
+                                      self.propensities, self.reaction_ordering, matrix_dimension)
 
         return A #row_index, column_index, reaction_list, state_column, sign
 

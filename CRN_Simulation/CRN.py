@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from scipy import sparse
+from scipy.integrate import solve_ivp
 
 from CRN_Simulation.DistributionOfSystems import DistributionOfSystems
 from CRN_Simulation.MarginalDistribution import MarginalDistribution
@@ -45,6 +46,8 @@ class CRN():
         # define state and parameters 
         self.state = np.zeros( [len(self.species_names)] ) # the state is a numpy array
         self.parameters = {} # the set of parameters is just a dictionary
+
+
 
 
     # incomplete stub for calling the propensity functions on the right parametrs
@@ -121,7 +124,7 @@ class CRN():
 
         # Store initial state in the output
         time_output = [t]
-        state_output = [self.state]
+        state_output = [self.state.copy()]
 
         while t < Tf:
             # Calculate propensities
@@ -252,7 +255,7 @@ class CRN():
 
         return self.species_ordering, states
 
-    # generate uniform marginal distributions for every species and parameters
+    # generate uniform marginal distributions for every species
     def generate_uniform_marginal_distributions_via_speceis_range(self, range_of_species):
         Marginal_distributions = {}
         # transverse all species
@@ -262,6 +265,18 @@ class CRN():
             marginal_uniform_distribution = MarginalDistribution(species, states, uniform_distribution)
             Marginal_distributions.update({species: marginal_uniform_distribution})
         return Marginal_distributions
+
+    # generate uniform marginal distributions for every parameter
+    def generate_uniform_marginal_distributions_via_parameter_range(self, range_of_parameters, discretization_size_parameters):
+        Marginal_distributions = {}
+        # transverse all parameters
+        for parameter in self.parameters_names:
+            states = list(np.linspace(range_of_parameters.loc[parameter, 'min'], range_of_parameters.loc[parameter, 'max'], discretization_size_parameters.loc[parameter, 0]))
+            uniform_distribution = np.ones(len(states)) / len(states)
+            marginal_uniform_distribution = MarginalDistribution(parameter, states, uniform_distribution)
+            Marginal_distributions.update({parameter: marginal_uniform_distribution})
+        return Marginal_distributions
+
 
     def generate_joint_distribution_from_marginal_distributions(self, Marginal_distributions, distribution):
         """
@@ -317,9 +332,101 @@ class CRN():
         return A
 
 
+    ###############################################
+    # Linear Noise Approximation
+    ###############################################
+
+    def LNA(self, initial_state, parameters, derivative_propensities, T0, Tf, output_time_points):
+        """
+        Linear Noise Approximation
+
+        :param initial_state: a dictionary of initial state
+        :param parameters: a dictionary of parameters
+        :param derivative_propensities: a lambda function of the derivative of propensities in x
+        :param T0: initial time
+        :param Tf: final time
+        :param output_time_points: a list of time points for output
+        :return: time, state
+        """
+        mean_output = np.zeros([len(self.species_names), len(output_time_points)])
+        cov_output = []
+
+        # set the parameters and derivatives of the propensities
+        self.set_parameters(parameters)
+        self.set_derivative_of_propensities_in_state(derivative_propensities)
+        x0_state = [initial_state[species] for species in self.species_names]
+        x0_cov = np.zeros( len(self.species_names) * len(self.species_names) )
+        x0 = np.concatenate([x0_state, x0_cov])
+
+
+        # solve the ODE
+        sol = solve_ivp(self.drift_term_of_LNA, [T0, Tf], x0, t_eval=output_time_points)
+
+        # extract the mean and covariance
+        for i in range(self.get_number_of_species()):
+            mean_output[i,:] = sol.y[i,:]
+        for t in range(len(sol.t)):
+            cov = sol.y[self.get_number_of_species():, t]
+            cov_output.append(cov.reshape(len(self.species_names), len(self.species_names)))
+
+        return {"time": sol.t, "mean": mean_output, "covariance": cov_output}
+
+
+    # set the derivative of propensities
+    def set_derivative_of_propensities_in_state(self, propensities_derivative_in_state):
+        self.propensities_derivative_in_state = propensities_derivative_in_state
+
+    def _eval_propensities_derivative_in_state(self):
+        """
+        Evaluate the derivative of propensities in state
+        """
+        out = []
+        for prop in self.propensities_derivative_in_state:
+            args = inspect.getfullargspec(prop).args
+            input_args = {}
+            for a in args:
+                if a in self.species_names:
+                    input_args[a] = self.state[self.species_ordering[a]]
+                else:
+                    input_args[a] = self.parameters[a]
+            out.append(prop(**input_args))
+        return np.array(out)
+
+    # define the ode system LNA
+    def drift_term_of_LNA(self, t, x):
+        # the notations follow the paper Golightly & Sherlock, Statistics and Computing, 2019
+
+        # x is the state: a vector contain the state first n element and the remaining n^2 element is the covariance matrix
+        # split the state
+        n = self.get_number_of_species()
+        state = x[:n]
+        covariance_matrix = x[n:].reshape(n,n)
+
+        #update the state
+        self.set_state({species: x[self.species_ordering[species]] for species in self.species_names})
+
+        # deterministic part
+        propensities = self._eval()
+        deterministic_part = np.dot(self.stoichiometric_matrix, propensities)
+
+        # stochastic part
+        derivative_propensities = self._eval_propensities_derivative_in_state()
+        F = np.dot(self.stoichiometric_matrix, derivative_propensities)
+        diagonal_propensities = np.diag(propensities)
+        beta = np.dot(np.dot(self.stoichiometric_matrix, diagonal_propensities), self.stoichiometric_matrix.T)
+        stochastic_part = np.dot(F, covariance_matrix) + covariance_matrix.dot(F.T) + beta
+
+        # return the drift term
+        return np.concatenate([deterministic_part, stochastic_part.reshape(-1)])
 
 
 
+
+
+
+    ###############################################
+    # Plotting
+    ###############################################
 
 
     # plot the result

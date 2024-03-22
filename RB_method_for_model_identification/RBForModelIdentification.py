@@ -13,6 +13,7 @@ import time
 import random
 import copy
 from multiprocessing import Pool
+import os
 
 from CRN_Simulation.CRN import CRN
 from CRN_ContinuousTimeFiltering.CRNForContinuousTimeFiltering import CRNForContinuousTimeFiltering
@@ -373,17 +374,40 @@ class RBForModelIdentification(CRN):
         leader_trajectories = []
         leader_ordering = []
         leader_species = particles[0].get_leader_species_names()
-        for particle in particles:
-            # simulate the particles
-            time_out, state_out = self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next)
+        # for particle in particles:
+        #     # simulate the particles
+        #     time_out, state_out = self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next)
+        #     particle.update_states(
+        #         {key: state_out[-1][self.species_ordering[key]] for key, i in zip(self.species_ordering, range(len(self.species_ordering)))})
+        #     # denote the leader system
+        #     Time_leader_temp, leader_trajectory_temp, leader_ordering_temp\
+        #         = self.extract_trajectory(time_out, state_out, leader_species)
+        #     time_leader.append(Time_leader_temp)
+        #     leader_trajectories.append(leader_trajectory_temp)
+        #     leader_ordering.append(leader_ordering_temp)
+
+        results = Parallel(n_jobs=-1)(
+            delayed(self.SSA)(
+                particle.states_dic,
+                particle.parameter_dic,
+                t_current,
+                t_next
+            ) for particle in particles
+        )
+
+        for j in range(len(results)):
+            time_out, state_out = results[j]
+            particle = particles[j]
             particle.update_states(
-                {key: state_out[-1][self.species_ordering[key]] for key, i in zip(self.species_ordering, range(len(self.species_ordering)))})
+                {key: state_out[-1][self.species_ordering[key]] for key in self.species_names})
             # denote the leader system
             Time_leader_temp, leader_trajectory_temp, leader_ordering_temp\
                 = self.extract_trajectory(time_out, state_out, leader_species)
             time_leader.append(Time_leader_temp)
             leader_trajectories.append(leader_trajectory_temp)
             leader_ordering.append(leader_ordering_temp)
+
+
 
         # compute the conditional distribution of the follower systems
         # record initial distributions
@@ -403,6 +427,7 @@ class RBForModelIdentification(CRN):
                 tqdm_disable=True
             ) for i in range(len(particles))
         )
+
 
 
         # update the follower distributions
@@ -523,6 +548,7 @@ class RBForModelIdentification(CRN):
             weights = weights / np.sum(weights)
         else: # if all weights are zero give the uniform weights
             weights = np.ones(len(weights)) / len(weights)
+            print("All weights are zero, give the uniform weights at this step!")
         o = np.zeros(len(weights)) # offsprings
         n = len(weights)
         g = n
