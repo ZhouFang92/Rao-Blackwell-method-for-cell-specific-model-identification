@@ -37,7 +37,7 @@ class MatrixExponentialKrylov:
             # Construct the basis; Arnoldi process
             beta = np.linalg.norm(b)
             if beta < 1e-10:
-                return b # if b is a zero vector, we return a zero vector
+                return np.zeros(b.size) # if b is a zero vector, we return a zero vector
             # print(b)
             # print(b.shape)
             # print(beta)
@@ -143,7 +143,7 @@ class MatrixExponentialKrylov:
             beta = np.linalg.norm(b)
             if beta < 1e-10:
                 time_list.append(Tf)
-                result_list.append(b)
+                result_list.append(np.zeros(b.size))
                 return time_list, result_list # if b is a zero vector, we return a zero vector
             V[:, 0:1] = b / beta
             for j in range(m):

@@ -7,10 +7,10 @@ import scipy
 from tqdm import tqdm
 
 from CRN_Simulation.CRN import CRN
+from CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
 from CRN_ContinuousTimeFiltering.HiddenSubsystems import HiddenSubsystems
 from CRN_ContinuousTimeFiltering.SparseMatrixStructure import SparseMatrixStructure
 from CRN_ContinuousTimeFiltering.DistributionOfSubsystems import DistributionOfSubsystems
-from CRN_ContinuousTimeFiltering.MatrixExponentialKrylov import MatrixExponentialKrylov
 
 # for debuging
 import time
