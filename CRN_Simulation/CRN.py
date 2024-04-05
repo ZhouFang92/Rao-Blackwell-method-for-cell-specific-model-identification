@@ -31,7 +31,7 @@ class CRN():
         :param propensities:
         """
         self.stoichiometric_matrix = np.array(stoichiometric_matrix) # numpy object
-        
+
         self.species_names = species_names # list of strings
         self.reaction_names = reaction_names # list of strings
         # save the ordering for further use
@@ -43,9 +43,18 @@ class CRN():
         self.propensities = propensities # list of functions
         self.propensities_dependencies = [ inspect.getfullargspec(p).args for p in self.propensities ] # [[strings]]
 
-        # define state and parameters 
+        # define state and parameters
         self.state = np.zeros( [len(self.species_names)] ) # the state is a numpy array
         self.parameters = {} # the set of parameters is just a dictionary
+
+        # variables related to LNA
+        self.propensities_derivative_in_state = None
+
+        # variables related to Moment Closure
+        self.first_moment_names = ['mu_' + species for species in self.species_names]
+        self.second_moment_names = ['y_' + species1 + '_' + species2 for species1 in self.species_names for species2 in self.species_names]
+        self.propensity_expectation_approximation_via_moments = None # a list of lambda functions
+        self.propensity_times_X_trans_expectation_approximation_via_moments = None # a list of lambda functions
 
 
 
@@ -76,7 +85,7 @@ class CRN():
         """Set the state to a specific value
 
         Args:
-            state (Dictionary): an (exhaustive!) dictionary setting the values for each element of the state 
+            state (Dictionary): an (exhaustive!) dictionary setting the values for each element of the state
         """
         for a in self.species_names:
             self.state[self.species_ordering[a]] = state[a]
@@ -420,6 +429,147 @@ class CRN():
         return np.concatenate([deterministic_part, stochastic_part.reshape(-1)])
 
 
+    ###############################################
+    # Moment Closure
+    # Notations follow the paper David Schnoerr, Sanguinetti, Grima, 2015
+    ###############################################
+
+    def Moment_Closure(self, initial_state, parameters, E_lambda_approximation, E_lambda_times_X_trans_approximation, T0, Tf, output_time_points):
+        """
+        Moment Closure
+
+        :param initial_state: a dictionary of initial state
+        :param parameters: a dictionary of parameters
+        :param E_lambda_approximation: a list of lambda functions of the expected propensities
+        :param E_lambda_times_X_trans_approximation: a list of lambda functions of the expected propensities
+        :param T0: initial time
+        :param Tf: final time
+        :param output_time_points: a list of time points for output
+        :return: time, moments
+        """
+
+        # set the parameters and lambda functions
+        self.set_parameters(parameters)
+        self.set_propensity_expectation_approximation_via_moments(E_lambda_approximation)
+        self.set_propensity_times_X_trans_expectation_approximation_via_moments(E_lambda_times_X_trans_approximation)
+        x0_state = np.array([initial_state[species] for species in self.species_names])
+        x0_second_moment = np.diag(x0_state**2)
+        x0 = np.concatenate([x0_state, x0_second_moment.reshape(-1)])
+
+        # solve the ODE
+        sol = solve_ivp(self.drift_term_of_Moment_Closure, [T0, Tf], x0, t_eval=output_time_points)
+
+        # extract the moments
+        mean_output = sol.y[:self.get_number_of_species(), :]
+        cov_output = []
+        for t in range(len(sol.t)):
+            cov = sol.y[self.get_number_of_species():, t]
+            cov = cov.reshape(len(self.species_names), len(self.species_names)) - np.outer(mean_output[:,t], mean_output[:,t])
+            cov_output.append(cov)
+
+        return {"time": sol.t, "mean": mean_output, "covariance": cov_output}
+
+
+
+
+    def set_propensity_expectation_approximation_via_moments(self, E_lambda_approximation):
+        # check the length of the approximation
+        if len(E_lambda_approximation) != self.get_number_of_reactions():
+            raise Exception(f'The length of the approximation of expected propensities ({len(E_lambda_approximation)}) is not consistent with the number of reactions ({self.get_number_of_reactions()}).')
+        # check the arguments of the lambda functions
+        valid_arguments = self.parameters_names + self.first_moment_names + self.second_moment_names
+        for p in E_lambda_approximation:
+            for arg in inspect.getfullargspec(p).args:
+                if arg not in valid_arguments:
+                    raise Exception(f'The argument {arg} is not in the list of moments')
+
+        self.propensity_expectation_approximation_via_moments = E_lambda_approximation
+
+    def set_propensity_times_X_trans_expectation_approximation_via_moments(self, E_lambda_times_X_trans_approximation):
+        # check the length of the approximation
+        if len(E_lambda_times_X_trans_approximation) != self.get_number_of_reactions():
+            raise Exception(f'The length of E_lambda_times_X_trans_approximation ({len(E_lambda_times_X_trans_approximation)}) is not consistent with the number of reactions ({self.get_number_of_reactions()}).')
+        # check the arguments of the lambda functions
+        valid_arguments = self.parameters_names + self.first_moment_names + self.second_moment_names
+        for p in E_lambda_times_X_trans_approximation:
+            for arg in inspect.getfullargspec(p).args:
+                if arg not in valid_arguments:
+                    raise Exception(f'The argument {arg} is not in the list of moments')
+        self.propensity_times_X_trans_expectation_approximation_via_moments = E_lambda_times_X_trans_approximation
+
+    def set_moment_values_dict(self, mu, y):
+        """
+        Return a dictionary of moments
+
+        :param mu: a vector of the first moments
+        :param y: a matrix of the second moments
+        :return: a dictionary
+        """
+
+        if type(mu) != np.ndarray:
+            raise Exception('The first moment is not a numpy array')
+        if type(y) != np.ndarray:
+            raise Exception('The second moment is not a numpy array')
+        if mu.shape[0] != len(self.species_names):
+            raise Exception('The length of the first moment is not consistent with the number of species')
+        if y.shape[0] != len(self.species_names) or y.shape[1] != len(self.species_names):
+            raise Exception('The shape of the second moment is not consistent with the number of species')
+        if np.array_equal(y, y.T) == False:
+            raise Exception('The second moment is not symmetric')
+
+        moment_values = {}
+        for i, species in enumerate(self.species_names):
+            moment_values['mu_' + species] = mu[i]
+            for j, species2 in enumerate(self.species_names):
+                moment_values['y_' + species + '_' + species2] = y[i,j]
+
+        return moment_values
+
+    def _eval_propensity_expectation_approximation_via_moments(self, mu, y):
+        all_arg_dict = self.set_moment_values_dict(mu, y)
+        all_arg_dict.update(self.parameters)
+        out = []
+        for prop in self.propensity_expectation_approximation_via_moments:
+            args = inspect.getfullargspec(prop).args
+            input_args = {a: all_arg_dict[a] for a in args}
+            out.append(prop(**input_args))
+
+        return np.array(out)
+
+    def _eval_propensity_tims_X_trans_expectation_approximation_via_moments(self, mu, y):
+        all_arg_dict = self.set_moment_values_dict(mu, y)
+        all_arg_dict.update(self.parameters)
+        out = []
+        for prop in self.propensity_times_X_trans_expectation_approximation_via_moments:
+            args = inspect.getfullargspec(prop).args
+            input_args = {a: all_arg_dict[a] for a in args}
+            out.append(prop(**input_args))
+
+        return np.array(out)
+
+    # define the ode system of Moment Closure
+    def drift_term_of_Moment_Closure(self, t, x):
+        # x is the state: a vector contain the state first n element and the remaining n^2 element is the matrix of the second moments
+
+        # split the state
+        n = self.get_number_of_species()
+        mu = x[:n]
+        y = x[n:].reshape(n,n)
+
+        # first moment part
+        E_propensities = self._eval_propensity_expectation_approximation_via_moments(mu, y)
+        first_moment_part = np.dot(self.stoichiometric_matrix, E_propensities)
+
+        # second moment part
+        E_prop_times_X_trans = self._eval_propensity_tims_X_trans_expectation_approximation_via_moments(mu, y)
+        F1 = np.dot(self.stoichiometric_matrix, E_prop_times_X_trans)
+        F2 = np.zeros([n,n])
+        for j in range(self.get_number_of_reactions()):
+            F2 = F2 + np.outer(self.stoichiometric_matrix[:,j], self.stoichiometric_matrix[:,j].T) * E_propensities[j]
+        second_moment_part = F1 + F1.T + F2
+
+        # return the drift term
+        return np.concatenate([first_moment_part, second_moment_part.reshape(-1)])
 
 
 
