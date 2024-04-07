@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import math
 from scipy import sparse
 from scipy.integrate import solve_ivp
+from joblib import Parallel, delayed
 
 from CRN_Simulation.DistributionOfSystems import DistributionOfSystems
 from CRN_Simulation.MarginalDistribution import MarginalDistribution
@@ -168,6 +169,24 @@ class CRN():
         state_output.append(self.state.copy())
 
         return time_output.copy(), state_output.copy()
+
+    # paralleld SSA with a list of species and parameters
+    def parallel_SSA(self, list_of_states, list_of_parameters, T0, Tf):
+
+        if len(list_of_states) != len(list_of_parameters):
+            raise Exception('The length of the list of states and parameters are not the same')
+
+        results = Parallel(n_jobs=-1)(
+            delayed(self.SSA)(
+                state = list_of_states[i],
+                parameters= list_of_parameters[i],
+                T0 = T0,
+                Tf = Tf
+            ) for i in range(len(list_of_states))
+        )
+
+        return results
+
 
     # extract the dynamics of particular species
     def extract_trajectory(self, time_list, state_list, species_name_list):
@@ -345,7 +364,7 @@ class CRN():
     # Linear Noise Approximation
     ###############################################
 
-    def LNA(self, initial_state, parameters, derivative_propensities, T0, Tf, output_time_points):
+    def LNA(self, initial_state, parameters, T0, Tf, output_time_points, atol=1e-6, rtol=1e-3):
         """
         Linear Noise Approximation
 
@@ -362,21 +381,25 @@ class CRN():
 
         # set the parameters and derivatives of the propensities
         self.set_parameters(parameters)
-        self.set_derivative_of_propensities_in_state(derivative_propensities)
+        # self.set_derivative_of_propensities_in_state(derivative_propensities)
+        if self.propensities_derivative_in_state is None:
+            raise Exception('The derivative of propensities is not implemented yet')
         x0_state = [initial_state[species] for species in self.species_names]
         x0_cov = np.zeros( len(self.species_names) * len(self.species_names) )
         x0 = np.concatenate([x0_state, x0_cov])
 
 
         # solve the ODE
-        sol = solve_ivp(self.drift_term_of_LNA, [T0, Tf], x0, t_eval=output_time_points)
+        sol = solve_ivp(self.drift_term_of_LNA, [T0, Tf], x0, t_eval=output_time_points, rtol=rtol, atol=atol)
 
         # extract the mean and covariance
-        for i in range(self.get_number_of_species()):
-            mean_output[i,:] = sol.y[i,:]
-        for t in range(len(sol.t)):
-            cov = sol.y[self.get_number_of_species():, t]
-            cov_output.append(cov.reshape(len(self.species_names), len(self.species_names)))
+        mean_output = sol.y[:len(self.species_names), :]
+        cov_output = sol.y[len(self.species_names):, :].T.reshape(-1, len(self.species_names), len(self.species_names))
+        # for i in range(self.get_number_of_species()):
+        #     mean_output[i,:] = sol.y[i,:]
+        # for t in range(len(sol.t)):
+        #     cov = sol.y[self.get_number_of_species():, t]
+        #     cov_output.append(cov.reshape(len(self.species_names), len(self.species_names)))
 
         return {"time": sol.t, "mean": mean_output, "covariance": cov_output}
 
@@ -434,7 +457,7 @@ class CRN():
     # Notations follow the paper David Schnoerr, Sanguinetti, Grima, 2015
     ###############################################
 
-    def Moment_Closure(self, initial_state, parameters, E_lambda_approximation, E_lambda_times_X_trans_approximation, T0, Tf, output_time_points):
+    def Moment_Closure(self, initial_state, parameters, T0, Tf, output_time_points, atol=1e-6, rtol=1e-3):
         """
         Moment Closure
 
@@ -450,22 +473,28 @@ class CRN():
 
         # set the parameters and lambda functions
         self.set_parameters(parameters)
-        self.set_propensity_expectation_approximation_via_moments(E_lambda_approximation)
-        self.set_propensity_times_X_trans_expectation_approximation_via_moments(E_lambda_times_X_trans_approximation)
+        # self.set_propensity_expectation_approximation_via_moments(E_lambda_approximation)
+        # self.set_propensity_times_X_trans_expectation_approximation_via_moments(E_lambda_times_X_trans_approximation)
+        if self.propensity_expectation_approximation_via_moments is None:
+            raise Exception('The approximation of expected propensities is not implemented yet')
+        if self.propensity_times_X_trans_expectation_approximation_via_moments is None:
+            raise Exception('The approximation of expected propensities times X transposed is not implemented yet')
         x0_state = np.array([initial_state[species] for species in self.species_names])
         x0_second_moment = np.diag(x0_state**2)
         x0 = np.concatenate([x0_state, x0_second_moment.reshape(-1)])
 
         # solve the ODE
-        sol = solve_ivp(self.drift_term_of_Moment_Closure, [T0, Tf], x0, t_eval=output_time_points)
+        sol = solve_ivp(self.drift_term_of_Moment_Closure, [T0, Tf], x0, t_eval=output_time_points, rtol=rtol, atol=atol)
 
         # extract the moments
         mean_output = sol.y[:self.get_number_of_species(), :]
-        cov_output = []
-        for t in range(len(sol.t)):
-            cov = sol.y[self.get_number_of_species():, t]
-            cov = cov.reshape(len(self.species_names), len(self.species_names)) - np.outer(mean_output[:,t], mean_output[:,t])
-            cov_output.append(cov)
+        cov_output = sol.y[self.get_number_of_species():, :].T.reshape(-1, len(self.species_names), len(self.species_names))
+        cov_output = cov_output - np.einsum('ij,ik->ijk', mean_output.T, mean_output.T)
+        # cov_output = []
+        # for t in range(len(sol.t)):
+        #     cov = sol.y[self.get_number_of_species():, t]
+        #     cov = cov.reshape(len(self.species_names), len(self.species_names)) - np.outer(mean_output[:,t], mean_output[:,t])
+        #     cov_output.append(cov)
 
         return {"time": sol.t, "mean": mean_output, "covariance": cov_output}
 
