@@ -455,6 +455,7 @@ class CRN():
     ###############################################
     # Moment Closure
     # Notations follow the paper David Schnoerr, Sanguinetti, Grima, 2015
+    # The ODE is developed for the mean and covariance to avoid scale issues
     ###############################################
 
     def Moment_Closure(self, initial_state, parameters, T0, Tf, output_time_points, atol=1e-6, rtol=1e-3):
@@ -480,8 +481,10 @@ class CRN():
         if self.propensity_times_X_trans_expectation_approximation_via_moments is None:
             raise Exception('The approximation of expected propensities times X transposed is not implemented yet')
         x0_state = np.array([initial_state[species] for species in self.species_names])
-        x0_second_moment = np.diag(x0_state**2)
-        x0 = np.concatenate([x0_state, x0_second_moment.reshape(-1)])
+        # x0_second_moment = np.diag(x0_state**2)
+        # x0 = np.concatenate([x0_state, x0_second_moment.reshape(-1)])
+        x0_cov = np.zeros([len(self.species_names), len(self.species_names)])
+        x0 = np.concatenate([x0_state, x0_cov.reshape(-1)])
 
         # solve the ODE
         sol = solve_ivp(self.drift_term_of_Moment_Closure, [T0, Tf], x0, t_eval=output_time_points, rtol=rtol, atol=atol)
@@ -489,7 +492,7 @@ class CRN():
         # extract the moments
         mean_output = sol.y[:self.get_number_of_species(), :]
         cov_output = sol.y[self.get_number_of_species():, :].T.reshape(-1, len(self.species_names), len(self.species_names))
-        cov_output = cov_output - np.einsum('ij,ik->ijk', mean_output.T, mean_output.T)
+        # cov_output = cov_output - np.einsum('ij,ik->ijk', mean_output.T, mean_output.T)
         # cov_output = []
         # for t in range(len(sol.t)):
         #     cov = sol.y[self.get_number_of_species():, t]
@@ -526,7 +529,7 @@ class CRN():
                     raise Exception(f'The argument {arg} is not in the list of moments')
         self.propensity_times_X_trans_expectation_approximation_via_moments = E_lambda_times_X_trans_approximation
 
-    def set_moment_values_dict(self, mu, y):
+    def set_moment_values_dict(self, mu, sigma):
         """
         Return a dictionary of moments
 
@@ -537,25 +540,26 @@ class CRN():
 
         if type(mu) != np.ndarray:
             raise Exception('The first moment is not a numpy array')
-        if type(y) != np.ndarray:
+        if type(sigma) != np.ndarray:
             raise Exception('The second moment is not a numpy array')
         if mu.shape[0] != len(self.species_names):
             raise Exception('The length of the first moment is not consistent with the number of species')
-        if y.shape[0] != len(self.species_names) or y.shape[1] != len(self.species_names):
-            raise Exception('The shape of the second moment is not consistent with the number of species')
-        if np.array_equal(y, y.T) == False:
-            raise Exception('The second moment is not symmetric')
+        if sigma.shape[0] != len(self.species_names) or sigma.shape[1] != len(self.species_names):
+            raise Exception('The shape of the covariance is not consistent with the number of species')
+        # if np.array_equal(y, y.T) == False:
+        #     print(y)
+        #     raise Exception('The second moment is not symmetric')
 
         moment_values = {}
         for i, species in enumerate(self.species_names):
             moment_values['mu_' + species] = mu[i]
             for j, species2 in enumerate(self.species_names):
-                moment_values['y_' + species + '_' + species2] = y[i,j]
+                moment_values['y_' + species + '_' + species2] = sigma[i,j] + mu[i]*mu[j]
 
         return moment_values
 
-    def _eval_propensity_expectation_approximation_via_moments(self, mu, y):
-        all_arg_dict = self.set_moment_values_dict(mu, y)
+    def _eval_propensity_expectation_approximation_via_moments(self, mu, sigma):
+        all_arg_dict = self.set_moment_values_dict(mu, sigma)
         all_arg_dict.update(self.parameters)
         out = []
         for prop in self.propensity_expectation_approximation_via_moments:
@@ -565,8 +569,8 @@ class CRN():
 
         return np.array(out)
 
-    def _eval_propensity_tims_X_trans_expectation_approximation_via_moments(self, mu, y):
-        all_arg_dict = self.set_moment_values_dict(mu, y)
+    def _eval_propensity_tims_X_trans_expectation_approximation_via_moments(self, mu, sigma):
+        all_arg_dict = self.set_moment_values_dict(mu, sigma)
         all_arg_dict.update(self.parameters)
         out = []
         for prop in self.propensity_times_X_trans_expectation_approximation_via_moments:
@@ -583,19 +587,21 @@ class CRN():
         # split the state
         n = self.get_number_of_species()
         mu = x[:n]
-        y = x[n:].reshape(n,n)
+        sigma = x[n:].reshape(n,n)
 
         # first moment part
-        E_propensities = self._eval_propensity_expectation_approximation_via_moments(mu, y)
+        E_propensities = self._eval_propensity_expectation_approximation_via_moments(mu, sigma)
         first_moment_part = np.dot(self.stoichiometric_matrix, E_propensities)
 
         # second moment part
-        E_prop_times_X_trans = self._eval_propensity_tims_X_trans_expectation_approximation_via_moments(mu, y)
+        E_prop_times_X_trans = self._eval_propensity_tims_X_trans_expectation_approximation_via_moments(mu, sigma)
         F1 = np.dot(self.stoichiometric_matrix, E_prop_times_X_trans)
-        F2 = np.zeros([n,n])
-        for j in range(self.get_number_of_reactions()):
-            F2 = F2 + np.outer(self.stoichiometric_matrix[:,j], self.stoichiometric_matrix[:,j].T) * E_propensities[j]
-        second_moment_part = F1 + F1.T + F2
+        diagonal_propensities = np.diag(E_propensities)
+        F2 = self.stoichiometric_matrix.dot(np.dot(diagonal_propensities, self.stoichiometric_matrix.T))
+        # F2 = np.zeros([n,n])
+        # for j in range(self.get_number_of_reactions()):
+        #     F2 = F2 + np.outer(self.stoichiometric_matrix[:,j], self.stoichiometric_matrix[:,j].T) * E_propensities[j]
+        second_moment_part = F1 + F1.T + F2 - np.outer(first_moment_part, mu) - np.outer(mu, first_moment_part)
 
         # return the drift term
         return np.concatenate([first_moment_part, second_moment_part.reshape(-1)])
