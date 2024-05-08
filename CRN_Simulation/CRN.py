@@ -170,22 +170,22 @@ class CRN():
 
         return time_output.copy(), state_output.copy()
 
-    # paralleld SSA with a list of species and parameters
-    def parallel_SSA(self, list_of_states, list_of_parameters, T0, Tf):
-
-        if len(list_of_states) != len(list_of_parameters):
-            raise Exception('The length of the list of states and parameters are not the same')
-
-        results = Parallel(n_jobs=-1)(
-            delayed(self.SSA)(
-                state = list_of_states[i],
-                parameters= list_of_parameters[i],
-                T0 = T0,
-                Tf = Tf
-            ) for i in range(len(list_of_states))
-        )
-
-        return results
+    # # paralleld SSA with a list of species and parameters
+    # def parallel_SSA(self, list_of_states, list_of_parameters, T0, Tf):
+    #
+    #     if len(list_of_states) != len(list_of_parameters):
+    #         raise Exception('The length of the list of states and parameters are not the same')
+    #
+    #     results = Parallel(n_jobs=-1)(
+    #         delayed(self.SSA)(
+    #             state = list_of_states[i],
+    #             parameters= list_of_parameters[i],
+    #             T0 = T0,
+    #             Tf = Tf
+    #         ) for i in range(len(list_of_states))
+    #     )
+    #
+    #     return results
 
 
     # extract the dynamics of particular species
