@@ -1,5 +1,10 @@
 # Rao-Blackwell-method-for-cell-specific-model-identification
 
+## Installation (CRN_Simulation_Inference)
+```bash
+pip install CRN_Simulation_Inference@git+https://github.com/ZhouFang92/Rao-Blackwell-method-for-cell-specific-model-identification.git
+```
+
 ## Required packages: 
 igraph, sklearn
 
