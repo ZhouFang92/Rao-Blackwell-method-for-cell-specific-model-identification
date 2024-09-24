@@ -14,10 +14,10 @@ from scipy import sparse
 from scipy.integrate import solve_ivp
 from joblib import Parallel, delayed
 
-from CRN_Simulation.DistributionOfSystems import DistributionOfSystems
-from CRN_Simulation.MarginalDistribution import MarginalDistribution
-from CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
-
+from CRN_Simulation_Inference.CRN_Simulation.DistributionOfSystems import DistributionOfSystems
+from CRN_Simulation_Inference.CRN_Simulation.MarginalDistribution import MarginalDistribution
+from CRN_Simulation_Inference.CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
+from CRN_Simulation_Inference.CRN_Simulation.CPP import CPP
 
 class CRN():
 
@@ -118,7 +118,7 @@ class CRN():
     def get_number_of_parameters(self):
         return len(self.parameters_names)
 
-    def SSA(self, state, parameters, T0, Tf):
+    def SSA(self, state, parameters, T0, Tf, compute_centered_poisson_process=False):
         """
 
         :param state: a dictionary
@@ -136,9 +136,20 @@ class CRN():
         time_output = [t]
         state_output = [self.state.copy()]
 
+
+        if compute_centered_poisson_process:
+            cPP = None
+            
+        tau = 0
+
         while t < Tf:
             # Calculate propensities
             a = self._eval()
+
+            if compute_centered_poisson_process:
+                # Initialize the centered Poisson process
+                if cPP is None:
+                    cPP = CPP(a, self.get_number_of_reactions())
 
             # Generate two random numbers
             r1 = np.random.rand()
@@ -160,13 +171,26 @@ class CRN():
                 break
             self.state = self.state + self.stoichiometric_matrix[:,mu]
 
+
+            if compute_centered_poisson_process: 
+                cPP.append(a, mu, tau)
+
             # Store the new state in the output
             time_output.append(t)
             state_output.append(self.state.copy())
 
+
+        if compute_centered_poisson_process:
+            # in the last case, we have already updated t to t+tau, so we need to
+            # roll back the update to get the right time window
+            cPP.append(a, None, Tf - t + tau)
+
         # the last update
         time_output.append(Tf)
         state_output.append(self.state.copy())
+
+        if compute_centered_poisson_process:
+            return time_output.copy(), state_output.copy(), cPP
 
         return time_output.copy(), state_output.copy()
 
@@ -628,6 +652,8 @@ class CRN():
             ax.step(time_list, state_output[:, i], where='post')
             ax.set_xlabel('Time')
             ax.set_ylabel('Copy number of ' + self.species_names[i])
+
+    
 
 if __name__ == '__main__':
     

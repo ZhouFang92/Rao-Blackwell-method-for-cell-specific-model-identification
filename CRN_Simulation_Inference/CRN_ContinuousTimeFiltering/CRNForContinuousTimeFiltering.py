@@ -6,11 +6,11 @@ import math
 import scipy
 from tqdm import tqdm
 
-from CRN_Simulation.CRN import CRN
-from CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
-from CRN_ContinuousTimeFiltering.HiddenSubsystems import HiddenSubsystems
-from CRN_ContinuousTimeFiltering.SparseMatrixStructure import SparseMatrixStructure
-from CRN_ContinuousTimeFiltering.DistributionOfSubsystems import DistributionOfSubsystems
+from CRN_Simulation_Inference.CRN_Simulation.CRN import CRN
+from CRN_Simulation_Inference.CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.HiddenSubsystems import HiddenSubsystems
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.SparseMatrixStructure import SparseMatrixStructure
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.DistributionOfSubsystems import DistributionOfSubsystems
 
 # for debuging
 import time

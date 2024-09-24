@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-from CRN_ContinuousTimeFiltering.SparseMatrixStructure import SparseMatrixStructure
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.SparseMatrixStructure import SparseMatrixStructure
 
 class HiddenSubsystems:
 

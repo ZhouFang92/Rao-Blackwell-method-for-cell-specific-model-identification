@@ -15,11 +15,11 @@ import copy
 from multiprocessing import Pool
 import os
 
-from CRN_Simulation.CRN import CRN
-from CRN_ContinuousTimeFiltering.CRNForContinuousTimeFiltering import CRNForContinuousTimeFiltering
-from CRN_ContinuousTimeFiltering.DistributionOfSubsystems import DistributionOfSubsystems
-from RB_method_for_model_identification.MarginalDistribution import MarginalDistribution
-from RB_method_for_model_identification.Particle import Particle
+from CRN_Simulation_Inference.CRN_Simulation.CRN import CRN
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.CRNForContinuousTimeFiltering import CRNForContinuousTimeFiltering
+from CRN_Simulation_Inference.CRN_ContinuousTimeFiltering.DistributionOfSubsystems import DistributionOfSubsystems
+from CRN_Simulation_Inference.RB_method_for_model_identification.MarginalDistribution import MarginalDistribution
+from CRN_Simulation_Inference.RB_method_for_model_identification.Particle import Particle
 
 # This class only contains 2 parts: 1. leader follower decomposition 2. RB-algorithm for model identification
 
@@ -214,6 +214,8 @@ class RBForModelIdentification(CRN):
         :param time_list: a list of jumping times
         :param time_points_for_observations: the time points for measurements
         :return: a list of measurements
+
+        TODO: this can be implemented in O(n)
         """
 
         if species_ordering is None:

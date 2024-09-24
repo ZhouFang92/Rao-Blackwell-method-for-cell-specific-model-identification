@@ -2,7 +2,7 @@
 import numpy as np
 
 
-from CRN_Simulation.MarginalDistribution import MarginalDistribution
+from CRN_Simulation_Inference.CRN_Simulation.MarginalDistribution import MarginalDistribution
 
 class DistributionOfSystems():
 
