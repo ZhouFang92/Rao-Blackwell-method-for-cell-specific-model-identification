@@ -100,7 +100,7 @@ class NeuralMartingale(torch.nn.Module):
 
         for measurement_index in range(self.times_t.shape[0]): # n * p operations p is the number of intervals and n the size of the batch
 
-            # interval on X
+            # indexes on X
             tau_index_abs_begin = measurement_index * self.M_bar 
             tau_index_abs_end = tau_index_abs_begin + self.M_bar
 
