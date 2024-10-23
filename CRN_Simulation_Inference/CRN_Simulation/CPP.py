@@ -82,7 +82,7 @@ class CPP():
                 cPP.append(actual - mean)
                 times_index += 1
             # we need to advance in the cPP indexes
-            elif self.time_list[cPP_index] < times[times_index]: 
+            elif self.time_list[cPP_index] <= times[times_index]: 
                 cPP_index += 1
             # we need to reconstruct the exact cPP value
             else: 
