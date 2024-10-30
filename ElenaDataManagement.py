@@ -65,8 +65,10 @@ def CRN_simulations_to_dataloaders(data, batch_size, test_split=0.2, shuffle_dat
 
     return train_loader, test_loader, tX, tY
 
+import random
+import math
 
-def run_SSA_for_filtering(MI, initial_state, parameter_values, t_fin, number_of_Y_samples, X_supersampling_intensity, t0=0, n_samples=1):
+def run_SSA_for_filtering(MI, initial_states, parameter_values, t_fin, number_of_Y_samples, X_supersampling_intensity, t0=0, n_samples=1):
     """ 
     run multiple SSA simulations with the specified sampling strategy
     """
@@ -79,7 +81,7 @@ def run_SSA_for_filtering(MI, initial_state, parameter_values, t_fin, number_of_
 
     for _ in tqdm(range(n_samples)):
 
-        time_list, state_list, cPP = MI.SSA(initial_state, parameter_values, t0, t_fin, compute_centered_poisson_process=True)
+        time_list, state_list, cPP = MI.SSA(initial_states[math.floor(random.random()*len(initial_states))], parameter_values, t0, t_fin, compute_centered_poisson_process=True)
         
         sampled_state_list = sample_trajectory_on_times(X_sampling_times, time_list, state_list)
         state_lists.append(sampled_state_list)

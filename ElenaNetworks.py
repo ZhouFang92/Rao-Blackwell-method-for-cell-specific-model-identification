@@ -281,7 +281,7 @@ class NeuralMartingale(torch.nn.Module):
         gx = self.g_function(Xstate)
 
         # TODO remove
-        likelihood = 1.0
+        # likelihood = 1.0
         return likelihood*gx
 
     def stochastic_integral(self, k, k_prime, q, q_prime, X, Y, R):
@@ -335,7 +335,10 @@ class NeuralMartingale(torch.nn.Module):
         n = self.times_t.shape[0] - 1
         loss = torch.zeros(self.g_output_size).to(X)
         for pair_index in index_pairs:
+        #for q in range(batch_size):
+        #    for q_prime in range(batch_size):
             q, q_prime = self.index_pairs[pair_index]
+            
             #for q in range(batch_size):
             #    for q_prime in range(batch_size):
             k_prime = k
@@ -348,7 +351,7 @@ class NeuralMartingale(torch.nn.Module):
             #print("g", g.shape, "nn", nn.shape, "si", si_vectorized.shape)
             #print("si", si)
             #print("si_vectorized", si_vectorized)
-            loss += (g - nn + si_vectorized)**2
+            loss += (g - nn - si_vectorized)**2
 
         return loss.sum()/(self.paired_batch_size*n)
 
@@ -455,8 +458,8 @@ class NeuralMartingale(torch.nn.Module):
         # NOTE: checked
         # encode X and Y
         
-        Yslice = torch.zeros_like(Yslice) # TODO remove
-        XatT = XatT*torch.tensor([1.,1.,0.]).to(XatT) # TODO remove
+        #Yslice = torch.zeros_like(Yslice) # TODO remove
+        #XatT = XatT*torch.tensor([1.,1.,0.]).to(XatT) # TODO remove
         eX = self.X_encoder(XatT).repeat(Yslice.shape[0], 1)
         eY = self.Y_encoder(Yslice)
 
