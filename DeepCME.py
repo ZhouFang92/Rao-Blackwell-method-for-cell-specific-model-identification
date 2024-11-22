@@ -277,7 +277,7 @@ class FilteringDeepCME(torch.nn.Module):
         where X_T is the value of the state at time T. 
     """
 
-    def __init__(self, backbone, X_encoder, Y_encoder, baseline_net, tau_times, measurement_times, g_functions, temporal_feature_extractor, R, K, O, position_in_the_chain, n_NN_in_chain, device="cpu"):
+    def __init__(self, backbone, X_encoder, Y_encoder, baseline_net, tau_times, measurement_times, g_functions, temporal_feature_extractor, R, K, O, position_in_the_chain, n_NN_in_chain, h_transform, likelihood, likelihood_parameters, device="cpu", next_in_chain=None, use_time_iteration=False, use_exact_poisson_for_debugging=False):
         """ 
         Default constructor
 
@@ -287,9 +287,10 @@ class FilteringDeepCME(torch.nn.Module):
         super(FilteringDeepCME, self).__init__()
 
         # NN components
-        self.backbone = backbone
         self.X_encoder = X_encoder
         self.Y_encoder = Y_encoder
+        self.backbone = backbone
+
         self.baseline_net = baseline_net # this corresponds to Y in the original deepCME formulation (mathcal Y)
 
         # list of taus (in t0 t1)
@@ -302,32 +303,49 @@ class FilteringDeepCME(torch.nn.Module):
         self.temporal_feature_extractor = temporal_feature_extractor
 
         self.R = R # number of g functions
-        self.K = K # dimensionality of the output
+        self.K = K # number of reactions
         self.O = O # dimensionality of the observations
+
         self.device = device
 
-        self.position_in_the_chain = position_in_the_chain
-        self.n_NN_in_chain = n_NN_in_chain
+        self.position_in_the_chain = position_in_the_chain # k in the paper
+        self.n_NN_in_chain = n_NN_in_chain # n in the paper
+        self.next_in_chain = next_in_chain
+
+        self.h_transform = h_transform
+
+        self.likelihood = likelihood
+        self.likelihood_parameters = likelihood_parameters
+
+        self.use_time_iteration = use_time_iteration
 
         # use xavier initialization for the backbone
-        for m in self.backbone.modules():
-            if isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                m.bias.data.fill_(0.01)
+        if self.backbone is not None:
+            for m in self.backbone.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.xavier_uniform_(m.weight)
+                    m.bias.data.fill_(0.01)
         # and for the encoders
-        for m in self.X_encoder.modules():
-            if isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                m.bias.data.fill_(0.01)
-        for m in self.Y_encoder.modules():
-            if isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                m.bias.data.fill_(0.01)
+        if self.X_encoder is not None:
+            for m in self.X_encoder.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.xavier_uniform_(m.weight)
+                    m.bias.data.fill_(0.01)
+        if self.Y_encoder is not None:
+            for m in self.Y_encoder.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.xavier_uniform_(m.weight)
+                    m.bias.data.fill_(0.01)
         # and for the baseline
-        for m in self.baseline_net.modules():
-            if isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                m.bias.data.fill_(0.01)
+        if self.baseline_net is not None:
+            for m in self.baseline_net.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.xavier_uniform_(m.weight)
+                    m.bias.data.fill_(0.01)
+
+        #self.setup_logger()
+
+        self.use_exact_poisson_for_debugging = use_exact_poisson_for_debugging  
         
 
     def forward(self, t, X, Y):
@@ -370,10 +388,11 @@ class FilteringDeepCME(torch.nn.Module):
     def forward_baseline(self, t, X, eY):
         #print("baseline eX, eY: ", eX.shape, eY.shape)
         eX = self.X_encoder(X)
-        current_time_features = self.temporal_feature_extractor(t).to(eX.device).repeat(eX.shape[0], 1)
+        #current_time_features = self.temporal_feature_extractor(t).to(eX.device).repeat(eX.shape[0], 1)
         repey = eY.repeat(eX.shape[0], 1)
         #print("baseline eX, repey, ctf: ", eX.shape, repey.shape, current_time_features.shape)
-        XY_with_temporal_features = torch.cat([current_time_features, eX, repey], dim=1)
+        #XY_with_temporal_features = torch.cat([current_time_features, eX, repey], dim=1) # NOTE now without temporal features
+        XY_with_temporal_features = torch.cat([eX, repey], dim=1)
         #print("baseline XY_with_temporal_features: ", XY_with_temporal_features.shape)
         out = self.baseline_net(XY_with_temporal_features) # --- this is the mathcal Y function
         # no reshape needed
@@ -394,8 +413,7 @@ class FilteringDeepCME(torch.nn.Module):
         """
         eY = self.Y_encoder(Y)
         return self.forward_baseline(t, X, eY)
-
-
+    
     def L(self, x, delta_threshold):
         """ 
         Computation of the inner part of the loss function
@@ -455,25 +473,140 @@ class FilteringDeepCME(torch.nn.Module):
         # return the sum
         return out
     
+    def SI_poisson(self, X, Y, dR):
+        # based on analytical_forward(self, t, t_fin, X, Y, Xmax=5)
+        before = torch.vmap(lambda t, x, y: self.analytical_martingale(t, self.measurement_times[-1], x, y), in_dims=(0, 1, None))(self.tau_times[:-1]+self.measurement_times[self.position_in_the_chain], X[:,:-1], Y)
+        after1 = torch.vmap(lambda t, x, y: self.analytical_martingale(t, self.measurement_times[-1], x, y), in_dims=(0, 1, None))(self.tau_times[:-1]+self.measurement_times[self.position_in_the_chain], X[:,:-1]+1., Y)
+        afterm1 = torch.vmap(lambda t, x, y: self.analytical_martingale(t, self.measurement_times[-1], x, y), in_dims=(0, 1, None))(self.tau_times[:-1]+self.measurement_times[self.position_in_the_chain], torch.maximum(X[:,:-1]-1., torch.tensor(0.).to(X)), Y)
+        stacked_fwd1 = (after1 - before).permute(1,0,2)
+        stacked_fwdm1 = (afterm1 - before).permute(1,0,2)
+        # compute the product in the stochastic integral, then sum over time points
+        # TODO check if this is correct
+        out1 = stacked_fwd1*dR[:,:,:1]
+        outm1 = stacked_fwdm1*dR[:,:, 1:]
+        # return the sum
+        return (out1 + outm1).sum(dim=1)
 
-    def G_last(self, X):
-        # likelihood = ... # let's start without
-        X_T = X[:, -1] 
-        return self.g(X_T)
+    def G_last(self, X, Y):
+        X_T = X[:, -1]
+        gX = self.g(X_T) 
+        likelihood = self.likelihood(Y[self.position_in_the_chain], X_T, self.h_transform, self.likelihood_parameters)
+        # likelihood = 1.
+        #print(likelihood.shape, gX.shape)
+        out = likelihood*gX
+        return out
+    
+    def G_not_last(self, X, Y, eYnext):
+        X_T = X[:, -1]
+        # use previous NN's prediction
+        gX = self.next_in_chain.forward_baseline(self.measurement_times[self.next_in_chain.position_in_the_chain], X_T, eYnext)  
+        
+        likelihood = self.likelihood(Y[self.position_in_the_chain], X_T, self.h_transform, self.likelihood_parameters) 
+        #likelihood = 1.
+
+        out = likelihood*gX
+        return out
+
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def unfreeze(self):
+        for param in self.parameters():
+            param.requires_grad = True
+
+    def poisson(self, x, t0, t, c1=1., c2=1.):
+        l1 = self.lambda_op(t0, t, c1, c2)
+        return (torch.exp(-torch.abs(l1))*(l1**x))/factorial(x)
+
+    def lambda_op(self, t0, t, c1, c2):
+        return c1/c2*(1-torch.exp(c2*(t0-t)))
+
+    # def M(self, x_minus_z, X, p_1_t_val):
+    #     mask = torch.abs(x_minus_z) <= X
+    #     diff = torch.abs(X-torch.abs(x_minus_z))
+    #     out = ((factorial(X)*(1-torch.abs(p_1_t_val))**(diff))/factorial(diff))*(p_1_t_val**(torch.abs(x_minus_z)))/factorial(torch.abs(x_minus_z))
+    #     out = out*mask.float()
+    #     return out
+    
+    def M(self, x, xi, p1t):
+        mask = torch.abs(x) <= xi
+        diff = torch.abs(xi - torch.abs(x))
+        out = ((factorial(xi) * ((1 - torch.abs(p1t)) ** (diff))) / factorial(diff)) * (p1t ** (torch.abs(x))) / factorial(torch.abs(x))
+        out = out * mask.float()
+        return out
+    
+    def p_1_t(self, t0, t, c2):
+        return torch.exp(-c2*(t-t0))
+
+    def p_M_conv(self, t, t_fin, x, X, Zmax=12):
+        out = None
+        for z in range(Zmax):
+            z = torch.ones_like(X)*z
+            Px = self.poisson(z, t0=t, t=t_fin, c1=1., c2=1.)
+            p_1_t_val = self.p_1_t(t, t_fin, c2=1.)
+
+            Mx = self.M(x-z, X, p_1_t_val)
+
+            if out is None:
+                out = Px*Mx
+            else:
+                out += Px*Mx
+        return out
+    
+    def analytical_martingale(self, t, t_fin, X, Y, Xmax=12):
+
+        # print("af X: ", X.shape)
+        # print("af Y: ", Y.shape)
+
+        out = None
+        for x in range(Xmax):
+            x = torch.ones_like(X)*x
+            # print("computing lik in a f (x shape)", x.shape)
+            L = self.likelihood(Y, x, self.h_transform, self.likelihood_parameters)
+            # print("done")
+            gx = self.g(x)
 
 
-    def compute_local_loss(self, X, eY, dR):
+            if out is None:
+                out = L*gx*self.p_M_conv(t, t_fin, x, X)
+            else:
+                out += L*gx*self.p_M_conv(t, t_fin, x, X)
+
+        return out
+
+    # def poisson_forward(self, Y, tbar, Xmax=10):
+    #     X = torch.arange(0, Xmax, 1).to(self.device).unsqueeze(0)
+    #     gX = self.g(X)
+    #     Lx = self.likelihood(Y, X, self.h_transform, self.likelihood_parameters)
+    #     Px = self.poisson(X, l0=1., t0=0., t=tbar)
+    #     return (gX*Lx*Px).sum(dim=-1)
+        
+    def compute_local_loss(self, X, eY, eYnext, Y, dR):
         
         if self.position_in_the_chain == self.n_NN_in_chain-1:
-            gX = self.G_last(X)
+            gX = self.G_last(X, Y)
         else:
-            raise NotImplementedError("Not implemented for intermediate NNs")
+            gX = self.G_not_last(X, Y, eYnext)
 
-        baseline = self.forward_baseline(self.measurement_times[self.position_in_the_chain], X[:,0], eY)
-        #print("baseline: ", baseline.shape)
-        inner = gX - self.SI(X, eY, dR) - baseline
-        delta_threshold = compute_delta_threshold(gX)
-        return self.L(inner, delta_threshold) # no mean here
+
+        if  self.use_exact_poisson_for_debugging: # TODO
+            # print("before SI", X.shape)
+            si = self.SI_poisson(X, Y, dR)
+            inner = gX - self.analytical_martingale(self.measurement_times[self.position_in_the_chain], self.measurement_times[-1], X[:, 0], Y)  - si
+            delta_threshold = compute_delta_threshold(gX)
+            L = self.L(inner, delta_threshold)
+
+        else:
+            baseline = self.forward_baseline(self.measurement_times[self.position_in_the_chain], X[:,0], eY)
+            #print("baseline: ", baseline.shape)
+            SI = self.SI(X, eY, dR)
+            inner = gX - SI - baseline
+
+            delta_threshold = compute_delta_threshold(gX)
+            L = self.L(inner, delta_threshold) # no mean here
+
+        return L
     
 
     def loss(self, X, Y, R):
@@ -491,31 +624,64 @@ class FilteringDeepCME(torch.nn.Module):
 
         # precompute the delta in the centered poisson process
         dR = R[:, 1:] - R[:, :-1]
-        eY = self.Y_encoder(Y[:, self.position_in_the_chain+1:])
+
         # split view of X to divide in Y related intervals
         X = split_overalp(X, Y.shape[1])
-        dR = split_overalp(dR, Y.shape[1])
+        dR = split(dR, Y.shape[1])
         # # observation: eY needs to be done in reverse fashon, which is then quite efficient to compute
 
         #print("before vmapping X, eY, dR: ", X.shape, eY.shape, dR.shape)
 
-        def inner_loop(x, ey, dr): # --- loop over k_prime
-            #print("inner_loop: ", x.shape, ey.shape, dr.shape)
-            out = self.compute_local_loss(x, ey, dr)
-            #print("inner out: ", out.shape)
-            return out
+        eY = self.Y_encoder(Y[:, self.position_in_the_chain+1:])
+        if self.position_in_the_chain < self.n_NN_in_chain-1:
+            eYnext = self.next_in_chain.Y_encoder(Y[:, self.next_in_chain.position_in_the_chain+1:])
+        else:
+            eYnext = eY #hack for compatibility reasons
 
-        def extern_loop(x, ey, dr): # --- loop over q
+        def extern_loop(x, ey, eYnext, y, dr): # --- loop over q
             #print("extern_loop: ", x.shape, ey.shape, dr.shape)
-            return torch.vmap(inner_loop, in_dims=(1, None, 1))(x, ey, dr).sum(dim=0) # sum over k_prime
+            return torch.vmap(self.compute_local_loss, in_dims=(1, None, None, 0, 1))(x, ey, eYnext, y[1:], dr).sum(dim=0) # sum over k_prime
+        
+        def extern_loop_without_time_iteration(x, ey, eYnext, y, dr):
+            return self.compute_local_loss(x[:, self.position_in_the_chain], ey, eYnext, y[1:], dr[:, self.position_in_the_chain]) # TODO <<<< check for possible errors 
 
-        L = torch.vmap(extern_loop, in_dims=(None, 0, None))(X, eY, dR).sum(dim=0).sum(dim=0) # sum over q and then sum over q_prime
+        if self.use_time_iteration:
+            L = torch.vmap(extern_loop, in_dims=(None, 0, 0, 0, None))(X, eY, eYnext, Y, dR).sum(dim=0).sum(dim=0) # sum over q and then sum over q_prime
+        else:
+            L = torch.vmap(extern_loop_without_time_iteration, in_dims=(None, 0, 0, 0, None))(X, eY, eYnext, Y, dR).sum(dim=0).sum(dim=0)
 
-        #L = torch.vmap(lambda x, ey, dr: torch.vmap(lambda t_k_prime, x_k_prime, ey, dr : self.compute_local_loss(t_k_prime, x_k_prime, ey, dr), in_dims=(0, 1, None, None))(self.measurement_times[:-1], x, ey, dr).sum(dim=0), in_dims=(None, 0, None))(X, eY, dR).sum(dim=0).sum(dim=0)
-        L = L/((X.shape[0]**2)*X.shape[1]) # twice batch size, and then sum over time points (of y measurements)
+        if self.use_time_iteration:
+            L = L/((X.shape[0]**2)*X.shape[1]) # twice batch size, and then sum over time points (of y measurements)
+        else:
+            L = L/(X.shape[0]**2)
+
         return L
 
+    def poisson_loss(self, X, Y, R):
+        # precompute the delta in the centered poisson process
+        dR = R[:, 1:] - R[:, :-1]
 
+        # split view of X to divide in Y related intervals
+        X = split_overalp(X, Y.shape[1])
+        dR = split(dR, Y.shape[1])
+        
+        def extern_loop_without_time_iteration(x, ey, eYnext, y, dr):
+            return self.compute_local_loss(x[:, self.position_in_the_chain], ey, eYnext, y[-1], dr[:, self.position_in_the_chain])
+
+        if self.use_time_iteration:
+            raise NotImplementedError
+        else:
+            L = torch.vmap(extern_loop_without_time_iteration, in_dims=(None, None, None, 0, None))(X, None, None, Y, dR).sum(dim=0).sum(dim=0)
+
+        if self.use_time_iteration:
+            raise NotImplementedError
+        else:
+            L = L/(X.shape[0]**2)
+
+        return L
+
+def split(X, size_y):
+    return X.view(X.shape[0], size_y-1, -1, X.shape[-1])
 
 def split_overalp(X, size_y):
     """ 
@@ -524,11 +690,18 @@ def split_overalp(X, size_y):
     NOTE: this should be done at dataset creation time
     """
     lastelement = X[:, -1, :]
+    # print("lastelement: ", lastelement.shape)
+    # print("X: ", X.shape)
     X = X[:, :-1].view(X.shape[0], size_y-1, -1, X.shape[-1])
     firstelements = torch.cat([X[:, 1:, 0, :], lastelement.unsqueeze(1)], dim=1)
     X = torch.cat([X, firstelements.unsqueeze(-2)], dim=2)
     return X
 
+def factorial(x):
+    mask = (x == 0)
+    x = x + mask.float()
+    out = torch.exp(torch.lgamma(x))
+    return out
         
 
                 
