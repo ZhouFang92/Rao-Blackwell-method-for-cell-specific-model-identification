@@ -319,29 +319,29 @@ class FilteringDeepCME(torch.nn.Module):
 
         self.use_time_iteration = use_time_iteration
 
-        # use xavier initialization for the backbone
-        if self.backbone is not None:
-            for m in self.backbone.modules():
-                if isinstance(m, torch.nn.Linear):
-                    torch.nn.init.xavier_uniform_(m.weight)
-                    m.bias.data.fill_(0.01)
-        # and for the encoders
-        if self.X_encoder is not None:
-            for m in self.X_encoder.modules():
-                if isinstance(m, torch.nn.Linear):
-                    torch.nn.init.xavier_uniform_(m.weight)
-                    m.bias.data.fill_(0.01)
-        if self.Y_encoder is not None:
-            for m in self.Y_encoder.modules():
-                if isinstance(m, torch.nn.Linear):
-                    torch.nn.init.xavier_uniform_(m.weight)
-                    m.bias.data.fill_(0.01)
-        # and for the baseline
-        if self.baseline_net is not None:
-            for m in self.baseline_net.modules():
-                if isinstance(m, torch.nn.Linear):
-                    torch.nn.init.xavier_uniform_(m.weight)
-                    m.bias.data.fill_(0.01)
+        # # use xavier initialization for the backbone
+        # if self.backbone is not None:
+        #     for m in self.backbone.modules():
+        #         if isinstance(m, torch.nn.Linear):
+        #             torch.nn.init.xavier_uniform_(m.weight)
+        #             m.bias.data.fill_(0.01)
+        # # and for the encoders
+        # if self.X_encoder is not None:
+        #     for m in self.X_encoder.modules():
+        #         if isinstance(m, torch.nn.Linear):
+        #             torch.nn.init.xavier_uniform_(m.weight)
+        #             m.bias.data.fill_(0.01)
+        # if self.Y_encoder is not None:
+        #     for m in self.Y_encoder.modules():
+        #         if isinstance(m, torch.nn.Linear):
+        #             torch.nn.init.xavier_uniform_(m.weight)
+        #             m.bias.data.fill_(0.01)
+        # # and for the baseline
+        # if self.baseline_net is not None:
+        #     for m in self.baseline_net.modules():
+        #         if isinstance(m, torch.nn.Linear):
+        #             torch.nn.init.xavier_uniform_(m.weight)
+        #             m.bias.data.fill_(0.01)
 
         #self.setup_logger()
 
@@ -385,7 +385,7 @@ class FilteringDeepCME(torch.nn.Module):
         # reshape the output to be of shape (batch_size, R, K)
         return out.view(-1, self.R, self.K) # --- from here analogous to DeepCME
 
-    def forward_baseline(self, t, X, eY):
+    def forward_baseline(self, t, X, eY): # we don't need the time here
         #print("baseline eX, eY: ", eX.shape, eY.shape)
         eX = self.X_encoder(X)
         #current_time_features = self.temporal_feature_extractor(t).to(eX.device).repeat(eX.shape[0], 1)
@@ -490,7 +490,7 @@ class FilteringDeepCME(torch.nn.Module):
     def G_last(self, X, Y):
         X_T = X[:, -1]
         gX = self.g(X_T) 
-        likelihood = self.likelihood(Y[self.position_in_the_chain], X_T, self.h_transform, self.likelihood_parameters)
+        likelihood = self.likelihood(Y[self.n_NN_in_chain - (self.position_in_the_chain+1)], X_T, self.h_transform, self.likelihood_parameters)
         # likelihood = 1.
         #print(likelihood.shape, gX.shape)
         out = likelihood*gX
@@ -499,10 +499,9 @@ class FilteringDeepCME(torch.nn.Module):
     def G_not_last(self, X, Y, eYnext):
         X_T = X[:, -1]
         # use previous NN's prediction
-        gX = self.next_in_chain.forward_baseline(self.measurement_times[self.next_in_chain.position_in_the_chain], X_T, eYnext)  
+        gX = self.next_in_chain.forward_baseline(None, X_T, eYnext)  
         
-        likelihood = self.likelihood(Y[self.position_in_the_chain], X_T, self.h_transform, self.likelihood_parameters) 
-        #likelihood = 1.
+        likelihood = self.likelihood(Y[self.n_NN_in_chain - (self.position_in_the_chain+1)], X_T, self.h_transform, self.likelihood_parameters) 
 
         out = likelihood*gX
         return out
@@ -590,7 +589,7 @@ class FilteringDeepCME(torch.nn.Module):
             gX = self.G_not_last(X, Y, eYnext)
 
 
-        if  self.use_exact_poisson_for_debugging: # TODO
+        if  self.use_exact_poisson_for_debugging:
             # print("before SI", X.shape)
             si = self.SI_poisson(X, Y, dR)
             inner = gX - self.analytical_martingale(self.measurement_times[self.position_in_the_chain], self.measurement_times[-1], X[:, 0], Y)  - si
@@ -598,32 +597,33 @@ class FilteringDeepCME(torch.nn.Module):
             L = self.L(inner, delta_threshold)
 
         else:
-            baseline = self.forward_baseline(self.measurement_times[self.position_in_the_chain], X[:,0], eY)
+            baseline = self.forward_baseline(None, X[:,0], eY)
             #print("baseline: ", baseline.shape)
             SI = self.SI(X, eY, dR)
             inner = gX - SI - baseline
 
-            delta_threshold = compute_delta_threshold(gX)
+            g_threshold = self.g(X[:, -1])
+            delta_threshold = compute_delta_threshold(g_threshold)
             L = self.L(inner, delta_threshold) # no mean here
 
         return L
     
 
-    def loss(self, X, Y, R):
+    def loss(self, X, Y, dR):
         """ 
         Computation of the loss function
 
         Args:
             X (torch.Tensor): The input tensor hid. [shape [batch_size, T, K]]
             Y (torch.Tensor): The input tensor obs. [shape [batch_size, T, O]]
-            R (torch.Tensor): The centered poisson process [shape [batch_size, T, R]]
+            dR (torch.Tensor): The centered poisson process (delta) [shape [batch_size, T, R]]
 
         Returns:
             torch.Tensor: The output of the loss function [shape [batch_size]]
         """
 
         # precompute the delta in the centered poisson process
-        dR = R[:, 1:] - R[:, :-1]
+        #dR = R[:, 1:] - R[:, :-1]
 
         # split view of X to divide in Y related intervals
         X = split_overalp(X, Y.shape[1])
@@ -632,9 +632,9 @@ class FilteringDeepCME(torch.nn.Module):
 
         #print("before vmapping X, eY, dR: ", X.shape, eY.shape, dR.shape)
 
-        eY = self.Y_encoder(Y[:, self.position_in_the_chain+1:])
+        eY = self.Y_encoder(Y[:, :self.n_NN_in_chain - (self.position_in_the_chain+1)+1]) # TODO revert to self.position_in_the_chain+1:
         if self.position_in_the_chain < self.n_NN_in_chain-1:
-            eYnext = self.next_in_chain.Y_encoder(Y[:, self.next_in_chain.position_in_the_chain+1:])
+            eYnext = self.next_in_chain.Y_encoder(Y[:, :self.n_NN_in_chain - (self.next_in_chain.position_in_the_chain+1)+1])
         else:
             eYnext = eY #hack for compatibility reasons
 
@@ -643,7 +643,7 @@ class FilteringDeepCME(torch.nn.Module):
             return torch.vmap(self.compute_local_loss, in_dims=(1, None, None, 0, 1))(x, ey, eYnext, y[1:], dr).sum(dim=0) # sum over k_prime
         
         def extern_loop_without_time_iteration(x, ey, eYnext, y, dr):
-            return self.compute_local_loss(x[:, self.position_in_the_chain], ey, eYnext, y[1:], dr[:, self.position_in_the_chain]) # TODO <<<< check for possible errors 
+            return self.compute_local_loss(x[:, self.n_NN_in_chain - (self.position_in_the_chain+1)], ey, eYnext, y[1:], dr[:, self.n_NN_in_chain - (self.position_in_the_chain+1)]) # TODO <<<< check for possible errors  revert to self.position_in_the_chain
 
         if self.use_time_iteration:
             L = torch.vmap(extern_loop, in_dims=(None, 0, 0, 0, None))(X, eY, eYnext, Y, dR).sum(dim=0).sum(dim=0) # sum over q and then sum over q_prime

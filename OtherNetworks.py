@@ -69,3 +69,48 @@ class RNNEncoder(torch.nn.Module):
         return out
 
 
+class RNNEncoderWithResidualConnection(RNNEncoder):
+
+    def __init__(self, input_size, embedding_size, activation=None, postprocessing_layer=None):
+        super(RNNEncoderWithResidualConnection, self).__init__(input_size, embedding_size, activation=None, postprocessing_layer=None)
+        self.Y_last_encoder = MLP(input_size, embedding_size, embedding_size, 1)
+
+
+    def forward(self, x, tgt_embedding):
+        out = self.RNN(x)[0][:, -1, :]
+        if self.activation is not None:
+            out = self.activation(out)
+        if self.postprocessing_layer is not None:
+            out = self.postprocessing_layer(out)
+
+        last_embedding = self.Y_last_encoder(x[:, tgt_embedding, :])
+        out = torch.cat([out, last_embedding], dim=1)
+
+        return out
+
+
+class MLPEncoder(torch.nn.Module):
+
+    def __init__(self, input_size, embedding_size, depth, activation=None, postprocessing_layer=None):
+        super(MLPEncoder, self).__init__()
+
+        self.input_size = input_size
+        self.embedding_size = embedding_size
+
+        self.MLP = MLP(input_size, embedding_size, embedding_size, 1)
+        if activation is not None:
+            self.activation = activation()
+        else:
+            self.activation = None
+            
+        self.postprocessing_layer = postprocessing_layer
+
+
+    def forward(self, x):
+        out = self.MLP(x)
+        if self.activation is not None:
+            out = self.activation(out)
+        if self.postprocessing_layer is not None:
+            out = self.postprocessing_layer(out)
+        return out
+

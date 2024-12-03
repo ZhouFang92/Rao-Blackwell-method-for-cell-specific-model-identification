@@ -93,6 +93,67 @@ class CPP():
                 times_index += 1
         return np.array(cPP)
 
+
+    def sample_at_times_with_observation_intervals(self, times, measurement_times):
+        """
+        return the cPP at a list of times, also resetting the cPP to zero at the measurement times
+
+        Args:
+            times (np.array): list of times at which to return the cPP (assumed sorted!)
+
+        It is more efficient than calling 'at' multiple times as the complexity is O(n) instead of O(nlog(n))
+        """
+        times_index = 0
+        cPP_index = 0
+        measurement_interval_index = 0
+        baseline_jump_count = np.zeros(self.centered_PP_actual[0].shape)
+        baseline_expectation_of_jump_count = np.zeros(self.centered_PP_mean[0].shape)
+        cPP = []
+
+        # note: the stored a tells us the propensity at the time BEFORE the event
+        # we need to use the one of the following interval
+
+        
+
+        while times_index < len(times): 
+
+            if times[min(times_index, len(times)-1)] >= measurement_times[min(measurement_interval_index, len(measurement_times)-1)] and measurement_interval_index < len(measurement_times):
+
+                left_index = min(max(0, cPP_index - 1), len(self.time_list) - 1)
+                baseline_jump_count = self.centered_PP_actual[left_index]
+                baseline_expectation_of_jump_count = self.centered_PP_mean[left_index] + self.current_a[min(len(self.time_list) - 1, left_index + 1)] * (measurement_times[measurement_interval_index] - self.time_list[left_index])
+                measurement_interval_index += 1
+
+            # we reached the end of the cPP
+            if cPP_index == len(self.time_list) - 1: 
+                left_index = len(self.time_list) - 1
+
+                actual = self.centered_PP_actual[left_index] - baseline_jump_count
+                mean = self.centered_PP_mean[left_index] + self.current_a[min(len(self.time_list) - 1, left_index + 1)] * (times[times_index] - self.time_list[left_index]) - baseline_expectation_of_jump_count
+
+                cpp = actual - mean
+
+                cPP.append(cpp)
+                times_index += 1
+            # we need to advance in the cPP indexes
+            elif self.time_list[cPP_index] <= times[times_index]: 
+                cPP_index += 1
+            # we need to reconstruct the exact cPP value
+            else: 
+                left_index = max(0, cPP_index - 1)
+
+                actual = self.centered_PP_actual[left_index] - baseline_jump_count
+                mean = self.centered_PP_mean[left_index] + self.current_a[min(len(self.time_list) - 1, left_index + 1)] * (times[times_index] - self.time_list[left_index]) - baseline_expectation_of_jump_count
+
+                cpp = actual - mean
+
+                cPP.append( cpp )
+                times_index += 1
+
+            
+
+        return np.array(cPP)
+
         
     def _add_pre_times(self, times, eps=1e-10):
         """
@@ -112,7 +173,7 @@ class CPP():
         return new_times
 
     # plot the cPP
-    def plot(self, times=None):
+    def plot(self, times=None, measurement_times=None):
         """
         plot the cPP
 
@@ -127,12 +188,17 @@ class CPP():
             time_list = self._add_pre_times(self.time_list)
         else:
             time_list = times
-        cPP = self.sample_at_times(time_list)
+        if measurement_times is not None:
+            time_list = self._add_pre_times(time_list)
+            cPP = self.sample_at_times_with_observation_intervals(time_list, measurement_times)
+        else:
+            cPP = self.sample_at_times(time_list)
         for i in range(cPP.shape[1]):
             plt.plot(time_list, cPP[:,i])
             plt.xlabel('Time')
             plt.ylabel('cPP value')
             plt.title('Centered Poisson Process')
+
 
 
 # import torch
