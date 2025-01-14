@@ -92,8 +92,40 @@ class CPP():
                 cPP.append(actual - mean)
                 times_index += 1
         return np.array(cPP)
+    
+    def sample_a_at_times(self, times):
+        """
+        return the propensity vector at a list of times
 
-        
+        Args:
+            times (np.array): list of times at which to return the cPP (assumed sorted!)
+
+        It is more efficient than calling 'at' multiple times as the complexity is O(n) instead of O(nlog(n))
+        """
+        times_index = 0
+        cPP_index = 0
+        A = []
+
+        # note: the stored a tells us the propensity at the time BEFORE the event
+        # we need to use the one of the following interval
+
+        while times_index < len(times):
+            # we reached the end of the cPP
+            if cPP_index == len(self.time_list): 
+                left_index = len(self.time_list) - 1
+                A.append(self.current_a[min(len(self.time_list) - 1, left_index + 1)])
+                times_index += 1
+            # we need to advance in the cPP indexes
+            elif self.time_list[cPP_index] <= times[times_index]: 
+                cPP_index += 1
+            # we need to reconstruct the exact cPP value
+            else: 
+                left_index = max(0, cPP_index - 1)
+                A.append(self.current_a[min(len(self.time_list) - 1, left_index + 1)])
+                times_index += 1
+        return np.array(A)
+
+
     def _add_pre_times(self, times, eps=1e-10):
         """
         add a small epsilon to the times to locate the discontinuities for plotting
