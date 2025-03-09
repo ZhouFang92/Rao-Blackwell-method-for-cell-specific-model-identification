@@ -400,6 +400,7 @@ class RBForModelIdentification(CRN):
         #     ) for particle in particles
         # )
         # rewrite using pathos
+        print(particles, type(t_current), type(t_next))
         results = mp.ProcessingPool().map(
             lambda particle: self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next),
             particles
