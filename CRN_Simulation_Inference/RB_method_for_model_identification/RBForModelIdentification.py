@@ -391,20 +391,20 @@ class RBForModelIdentification(CRN):
         #     leader_trajectories.append(leader_trajectory_temp)
         #     leader_ordering.append(leader_ordering_temp)
 
-        results = Parallel(n_jobs=-1, backend='loky')(
-            delayed(self.SSA)(
-                particle.states_dic,
-                particle.parameter_dic,
-                t_current,
-                t_next
-            ) for particle in particles
-        )
+        # results = Parallel(n_jobs=-1, backend='loky')(
+        #     delayed(self.SSA)(
+        #         particle.states_dic,
+        #         particle.parameter_dic,
+        #         t_current,
+        #         t_next
+        #     ) for particle in particles
+        # )
         # rewrite using pathos
 
-        # results = mp.ProcessingPool().map(
-        #     lambda particle: self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next),
-        #     particles
-        # )
+        results = mp.ProcessingPool().map(
+            lambda particle: self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next),
+            particles
+        )
 
         for j in range(len(results)):
             time_out, state_out = results[j]
