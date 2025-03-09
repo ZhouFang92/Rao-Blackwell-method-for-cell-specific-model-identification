@@ -418,7 +418,7 @@ class RBForModelIdentification(CRN):
                 Initial_Distributions.append(particle.follower_distributions[i].distribution_list[-1])
             Initial_distributions_list.append(Initial_Distributions)
         # compute the conditional distribution
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1, backend='loky')(
             delayed(CF.filteringFFSP_return_final_distribution)(
                 Y_trajectory=leader_trajectories[i],
                 Y_ordering=leader_ordering[i],

@@ -12,12 +12,13 @@ import matplotlib.pyplot as plt
 import math
 from scipy import sparse
 from scipy.integrate import solve_ivp
-from joblib import Parallel, delayed
+# from joblib import Parallel, delayed
 
 from CRN_Simulation_Inference.CRN_Simulation.DistributionOfSystems import DistributionOfSystems
 from CRN_Simulation_Inference.CRN_Simulation.MarginalDistribution import MarginalDistribution
 from CRN_Simulation_Inference.CRN_Simulation.MatrixExponentialKrylov import MatrixExponentialKrylov
 from CRN_Simulation_Inference.CRN_Simulation.CPP import CPP
+from CRN_Simulation_Inference.CRN_Simulation.Data import Trajectory
 
 class CRN():
 
@@ -117,6 +118,132 @@ class CRN():
 
     def get_number_of_parameters(self):
         return len(self.parameters_names)
+
+    def SSA_rich_data_structure(self, state, parameters, T0, Tf):  # TODO this version of the SSA algorithm was changed to create the Trajectory object, check its details as well
+        """
+        This procedure return a Trajectory object that tracks
+        time, state, firing reactions and propensities of a SSA simulation
+
+        Consider that the interval stored contains the initial time and the final time
+        (with no associated firing reactions/propensities)
+
+        :param state: a dictionary
+        :param parameters: a disctionary
+        :param T0: the inital time
+        :param Tf: final time
+        :return: Trajectory
+        """
+        # Initialize time and state variables
+        t = T0
+        self.set_parameters(parameters)
+        self.set_state(state)
+
+        # Store initial state in the output
+
+        trj = Trajectory()
+        trj.add_time(t)
+        trj.add_state(self.state.copy())
+        trj.add_propensity(self._eval())
+        trj.add_firing_reaction(-1)
+
+        while t < Tf:
+            # Calculate propensities
+            a = self._eval()
+            # save the indexes of firing reactions
+
+            # Generate two random numbers
+            r1 = np.random.rand()
+            r2 = np.random.rand()
+
+            # Calculate the time until the next reaction occurs
+            alpha = np.sum(a)
+            tau = (1 / alpha) * np.log(1 / r1)
+
+            # Choose the next reaction
+            mu = np.argmax(np.cumsum(a) >= r2 * alpha)
+
+            # Update the time and state
+            t = t + tau
+            if t > Tf:
+                break
+
+            trj.add_firing_reaction(mu)  # save the index of the firing reaction
+            trj.add_propensity(a)  # save the propensities of all reactions
+            self.state = self.state + self.stoichiometric_matrix[:, mu]
+
+            # Store the new state in the output
+            trj.add_time(t)
+            trj.add_state(self.state.copy())
+
+        # the last update
+        trj.add_firing_reaction(mu)
+        trj.add_propensity(a)
+        trj.add_time(Tf)
+        trj.add_state(self.state.copy())
+        return trj
+
+    def SSA_rich_data_structure(self, state, parameters, T0, Tf):  # TODO this version of the SSA algorithm was changed to create the Trajectory object, check its details as well
+        """
+        This procedure return a Trajectory object that tracks
+        time, state, firing reactions and propensities of a SSA simulation
+
+        Consider that the interval stored contains the initial time and the final time
+        (with no associated firing reactions/propensities)
+
+        :param state: a dictionary
+        :param parameters: a disctionary
+        :param T0: the inital time
+        :param Tf: final time
+        :return: Trajectory
+        """
+        # Initialize time and state variables
+        t = T0
+        self.set_parameters(parameters)
+        self.set_state(state)
+
+        # Store initial state in the output
+
+        trj = Trajectory()
+        trj.add_time(t)
+        trj.add_state(self.state.copy())
+        trj.add_propensity(self._eval())
+        trj.add_firing_reaction(-1)
+
+        while t < Tf:
+            # Calculate propensities
+            a = self._eval()
+            # save the indexes of firing reactions
+
+            # Generate two random numbers
+            r1 = np.random.rand()
+            r2 = np.random.rand()
+
+            # Calculate the time until the next reaction occurs
+            alpha = np.sum(a)
+            tau = (1 / alpha) * np.log(1 / r1)
+
+            # Choose the next reaction
+            mu = np.argmax(np.cumsum(a) >= r2 * alpha)
+
+            # Update the time and state
+            t = t + tau
+            if t > Tf:
+                break
+
+            trj.add_firing_reaction(mu)  # save the index of the firing reaction
+            trj.add_propensity(a)  # save the propensities of all reactions
+            self.state = self.state + self.stoichiometric_matrix[:, mu]
+
+            # Store the new state in the output
+            trj.add_time(t)
+            trj.add_state(self.state.copy())
+
+        # the last update
+        trj.add_firing_reaction(mu)
+        trj.add_propensity(a)
+        trj.add_time(Tf)
+        trj.add_state(self.state.copy())
+        return trj
 
     def SSA(self, state, parameters, T0, Tf, compute_centered_poisson_process=False):
         """

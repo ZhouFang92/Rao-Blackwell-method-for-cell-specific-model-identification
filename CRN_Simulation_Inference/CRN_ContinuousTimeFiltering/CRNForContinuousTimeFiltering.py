@@ -314,6 +314,9 @@ class CRNForContinuousTimeFiltering(CRN):
 
     def get_number_of_hidden_species(self):
         return len(self.hidden_species)
+    
+    def get_number_of_species(self):
+        return len(self.species_names)
 
     def get_size_of_space_for_each_species(self):
         df_size_species_space = self.range_of_species['max'].sub(self.range_of_species['min'])
@@ -367,7 +370,40 @@ class CRNForContinuousTimeFiltering(CRN):
                     return False
         return True
 
+    def get_observable_reaction_indexes(self):
+        return [self.reaction_ordering[reaction] for reaction in self.observable_reaction]
 
+    def get_observable_species_indexes(self):
+        return [self.species_ordering[species] for species in self.observable_species]
+
+    def extract_Observable_trajectory(self, time_list, state_list):
+        # initialization
+        species_name_list = self.observable_species
+        species_ordering = {species: count for species, count in zip(species_name_list, range(len(species_name_list)))}
+        species_index = [self.species_ordering[species] for species in species_name_list]
+        states = np.array(state_list)[:, species_index]
+        time_new = [time_list[0]]
+        state_new = [states[0, :]]
+        fired_compatibale_observable_reactions = [[]]
+
+        for i in range(len(time_list) - 2):
+            dX = states[i + 1, :] - states[i, :]
+            if np.any(dX != 0):
+                time_new.append(time_list[i + 1])
+                state_new.append(states[i + 1, :])
+                math_column = [col for col in self.xi if (self.xi[col] == dX).all()]
+                possible_reactions = self.O_xi[self.xi_ordering[math_column[0]]]
+                fired_compatibale_observable_reactions.append(possible_reactions)
+
+        # record the final distribution
+        time_new.append(time_list[-1])
+        state_new.append(states[-1, :])
+        fired_compatibale_observable_reactions.append([])
+
+        result = {'time_list': time_new, 'state_list': state_new, 'species_ordering': species_ordering, \
+                  'possible_reactions': fired_compatibale_observable_reactions}
+
+        return result
 
 
     #######################################
