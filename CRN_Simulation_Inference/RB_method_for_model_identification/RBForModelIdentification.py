@@ -388,7 +388,7 @@ class RBForModelIdentification(CRN):
         #     leader_trajectories.append(leader_trajectory_temp)
         #     leader_ordering.append(leader_ordering_temp)
 
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1, backend='loky')(
             delayed(self.SSA)(
                 particle.states_dic,
                 particle.parameter_dic,
@@ -420,7 +420,7 @@ class RBForModelIdentification(CRN):
                 Initial_Distributions.append(particle.follower_distributions[i].distribution_list[-1])
             Initial_distributions_list.append(Initial_Distributions)
         # compute the conditional distribution
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1, backend='loky')(
             delayed(CF.filteringFFSP_return_final_distribution)(
                 Y_trajectory=leader_trajectories[i],
                 Y_ordering=leader_ordering[i],
@@ -440,7 +440,7 @@ class RBForModelIdentification(CRN):
 
     def update_step_time_course_data(self, t, particles, Y):
         # compute the likelihood of each particle
-        Likelihood_results = Parallel(n_jobs=-1)(
+        Likelihood_results = Parallel(n_jobs=-1, backend='loky')(
             delayed(self.Likelihood_time_course_data)(Y, particle)
             for particle in particles
         )
