@@ -12,7 +12,10 @@ from multiprocessing import get_context
 import time
 import random
 import copy
-from multiprocessing import Pool
+
+# pathos
+import pathos.multiprocessing as mp
+
 import os
 
 from CRN_Simulation_Inference.CRN_Simulation.CRN import CRN
@@ -396,9 +399,11 @@ class RBForModelIdentification(CRN):
         #         t_next
         #     ) for particle in particles
         # )
-        # rewrite using multiprocessing
-        with Pool(os.cpu_count()) as p:
-            results = p.starmap(self.SSA, [(particle.states_dic, particle.parameter_dic, t_current, t_next) for particle in particles])
+        # rewrite using pathos
+        results = mp.ProcessingPool().map(
+            lambda particle: self.SSA(particle.states_dic, particle.parameter_dic, t_current, t_next),
+            particles
+        )
 
         for j in range(len(results)):
             time_out, state_out = results[j]
