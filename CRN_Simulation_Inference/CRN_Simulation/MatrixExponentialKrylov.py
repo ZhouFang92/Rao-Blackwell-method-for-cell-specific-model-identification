@@ -145,7 +145,7 @@ class MatrixExponentialKrylov:
                 time_list.append(Tf)
                 result_list.append(np.zeros(b.size))
                 return time_list, result_list # if b is a zero vector, we return a zero vector
-            V[:, 0:1] = b / beta
+            V[:, 0] = b / beta # TODO: check if this is correct
             for j in range(m):
                 # print(j)
                 w = A.dot(V[:, j])
