@@ -145,7 +145,8 @@ class MatrixExponentialKrylov:
                 time_list.append(Tf)
                 result_list.append(np.zeros(b.size))
                 return time_list, result_list # if b is a zero vector, we return a zero vector
-            V[:, 0] = (b / beta)[:, 0] 
+            print(V.shape, b.shape)
+            V[:, 0:1] = (b / beta).expand_dims(1)
             for j in range(m):
                 # print(j)
                 w = A.dot(V[:, j])
