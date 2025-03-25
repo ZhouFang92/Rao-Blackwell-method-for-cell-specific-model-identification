@@ -619,7 +619,10 @@ class RBForModelIdentification(CRN):
         :return: a list of marginal distributions
         """
         marginal_distributions = []
-        t = particles[0].follower_distributions[1].time_list[-1]
+        if self.get_number_of_follower_subsystems() > 0:
+            t = particles[0].follower_distributions[1].time_list[-1]
+        else:
+            t = 0
         leader_species = particles[0].get_leader_species_names()
         follower_components = particles[0].get_follower_parameter_species_names()
 
