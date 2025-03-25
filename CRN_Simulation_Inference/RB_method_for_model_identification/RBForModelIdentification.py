@@ -443,7 +443,7 @@ class RBForModelIdentification(CRN):
         #         tqdm_disable=True
         #     ) for i in range(len(particles))
         # )
-        print("DEBUG:", leader_ordering)
+        # print("DEBUG:", leader_ordering)
         results = [
             CF.filteringFFSP_return_final_distribution(
                 Y_trajectory=leader_trajectories[i],
